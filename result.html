@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8">
+    <title>Levantamento Bibliográfico (JSON local, carregamento sob demanda)</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #111827;
+            --muted: #94a3b8;
+            --text: #e5e7eb;
+            --accent: #22d3ee;
+            --line: #1f2937;
+            --header-h: 64px;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial
+        }
+
+        header {
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--line);
+            position: sticky;
+            top: 0;
+            background: linear-gradient(180deg, var(--bg), rgba(15, 23, 42, .92));
+            backdrop-filter: saturate(1.2) blur(4px);
+            z-index: 10
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: .2px
+        }
+
+        .container {
+            padding: 20px
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 10px;
+            background: var(--panel);
+            padding: 14px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            position: sticky;
+            top: calc(var(--header-h) + 8px);
+            z-index: 9;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, .25)
+        }
+
+        .filters label {
+            font-size: 12px;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 4px
+        }
+
+        .filters input,
+        .filters select,
+        .filters button {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0b1220;
+            color: var(--text);
+            outline: none
+        }
+
+        .filters input::placeholder {
+            color: #64748b
+        }
+
+        .filters button {
+            cursor: pointer;
+            background: #0b1220;
+            border-color: #334155
+        }
+
+        .filters button.primary {
+            background: var(--accent);
+            color: #0b1220;
+            border-color: transparent;
+            font-weight: 600
+        }
+
+        .filters button:disabled {
+            opacity: .5;
+            cursor: not-allowed
+        }
+
+        .col-2 {
+            grid-column: span 2
+        }
+
+        .col-3 {
+            grid-column: span 3
+        }
+
+        .col-4 {
+            grid-column: span 4
+        }
+
+        .col-6 {
+            grid-column: span 6
+        }
+
+        .col-12 {
+            grid-column: span 12
+        }
+
+        @media (max-width:980px) {
+            :root {
+                --header-h: 80px
+            }
+
+            .col-6,
+            .col-4 {
+                grid-column: span 12
+            }
+
+            .col-3,
+            .col-2 {
+                grid-column: span 6
+            }
+        }
+
+        .status {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin: 14px 2px;
+            color: var(--muted);
+            font-size: 13px;
+            flex-wrap: wrap
+        }
+
+        .status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%
+        }
+
+        .status .ok {
+            background: #22c55e
+        }
+
+        .status .warn {
+            background: #f59e0b
+        }
+
+        .status .err {
+            background: #ef4444
+        }
+
+        .status .idle {
+            background: #64748b
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            margin: 12px 0
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid #334155;
+            background: #0b1220;
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 12px;
+            color: #cbd5e1
+        }
+
+        .pager {
+            display: flex;
+            gap: 8px;
+            align-items: center
+        }
+
+        .pager button {
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #0b1220;
+            color: var(--text)
+        }
+
+        .table-wrap {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            overflow: auto;
+            background: #0b1220
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            min-width: 1380px
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: #0e1628;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            padding: 10px;
+            white-space: nowrap
+        }
+
+        thead th.sortable {
+            cursor: pointer
+        }
+
+        tbody td {
+            border-top: 1px solid #0f1a31;
+            vertical-align: top;
+            padding: 10px
+        }
+
+        tbody tr:nth-child(even) {
+            background: #0c1324
+        }
+
+        a {
+            color: #7dd3fc;
+            text-decoration: none
+        }
+
+        a:hover {
+            text-decoration: underline
+        }
+
+        .empty {
+            padding: 30px;
+            border: 1px dashed #334155;
+            border-radius: 10px;
+            color: #cbd5e1;
+            background: #0b1220
+        }
+
+        .small {
+            font-size: 12px;
+            color: #94a3b8
+        }
+
+        /* Relevância pílulas */
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            line-height: 1.6;
+            border: 1px solid #334155;
+            background: #0b1220;
+            text-transform: capitalize
+        }
+
+        .pill.alto {
+            border-color: #14532d;
+            background: #052e16;
+            color: #86efac
+        }
+
+        .pill.medio {
+            border-color: #854d0e;
+            background: #451a03;
+            color: #fbbf24
+        }
+
+        .pill.baixo {
+            border-color: #7f1d1d;
+            background: #3f0e0e;
+            color: #fca5a5
+        }
+
+        /* Estado excluído (quando opta por mostrar excluídos) */
+        tr.deleted {
+            opacity: .55
+        }
+
+        tr.deleted td.titulo {
+            text-decoration: line-through
+        }
+
+        .actions button {
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #0b1220;
+            color: var(--text);
+            cursor: pointer
+        }
+
+        .actions button:hover {
+            filter: brightness(1.1)
+        }
+
+        /* Exibição da citação: compacta por padrão, com opção de expandir */
+        .citar {
+            white-space: pre-wrap;
+            /* preserva quebras */
+            word-break: break-word;
+            line-height: 1.25;
+            font-size: 12px;
+            /* fonte reduzida */
+            max-width: 220px;
+            /* coluna mais estreita */
+            max-height: 8.5em;
+            /* ~6–7 linhas visíveis */
+            overflow: hidden;
+            /* esconde excesso (ver mais) */
+            position: relative;
+        }
+
+        /* “fade” no rodapé para indicar que há mais conteúdo */
+        .citar:not(.expanded)::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 24px;
+            background: linear-gradient(to bottom, rgba(11, 18, 32, 0), #0b1220);
+            pointer-events: none;
+        }
+
+        /* quando expandido, libera altura */
+        .citar.expanded {
+            max-height: none;
+        }
+
+        /* largura fixa da coluna (ajuda a não “empurrar” a tabela) */
+        td.citar-cell,
+        th.citar-cell {
+            width: 260px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Resultados do Levantamento — JSON local sob demanda</h1>
+    </header>
+
+    <div class="container">
+        <div class="filters" id="filters">
+            <div class="col-6">
+                <label for="f_descritor">Filtrar pelo descritor (texto) <span class="small">dica: use a
+                        lista</span></label>
+                <input id="f_descritor" list="descritor-list" placeholder='ex.: "Parque Nacional da Serra da Capivara"'>
+                <datalist id="descritor-list"></datalist>
+            </div>
+
+            <div class="col-3">
+                <label for="f_fonte">Fonte</label>
+                <select id="f_fonte">
+                    <option value="">(todas)</option>
+                    <option>SciELO</option>
+                    <option>OpenAlex</option>
+                    <option>Crossref</option>
+                    <option>BDTD</option>
+                    <option>Iphan</option>
+                    <option>Unesco</option>
+                </select>
+            </div>
+
+            <div class="col-3">
+                <label for="f_tipo">Tipo</label>
+                <select id="f_tipo">
+                    <option value="">(todos)</option>
+                    <option>article</option>
+                    <option>journal-article</option>
+                    <option>dissertation</option>
+                    <option>thesis</option>
+                    <option>book-chapter</option>
+                    <option>other</option>
+                    <option>Tratados</option>
+                </select>
+            </div>
+
+            <div class="col-2"><label for="f_ano_min">Ano ≥</label><input id="f_ano_min" type="number" min="1800"
+                    max="2100" placeholder="ex.: 1979"></div>
+            <div class="col-2"><label for="f_ano_max">Ano ≤</label><input id="f_ano_max" type="number" min="1800"
+                    max="2100" placeholder="ex.: 2025"></div>
+
+            <div class="col-4"><label for="f_titulo">Palavra no título</label><input id="f_titulo" type="text"
+                    placeholder='ex.: "plano de manejo"'></div>
+            <div class="col-4"><label for="f_autores">Autores (texto)</label><input id="f_autores" type="text"
+                    placeholder='ex.: "Niède Guidon" ou "Santos"'></div>
+
+            <div class="col-2">
+                <label for="f_relevancia">Relevância</label>
+                <select id="f_relevancia">
+                    <option value="">(todas)</option>
+                    <option value="alto">alto</option>
+                    <option value="medio">médio</option>
+                    <option value="baixo">baixo</option>
+                </select>
+            </div>
+
+            <div class="col-2">
+                <label for="f_excluidos">Exibir excluídos?</label>
+                <select id="f_excluidos">
+                    <option value="nao">não</option>
+                    <option value="sim">sim</option>
+                </select>
+            </div>
+
+            <div class="col-4"><label for="f_doi">DOI (opcional)</label><input id="f_doi" type="text"
+                    placeholder="10.xxxx/xxxxx"></div>
+
+            <div class="col-4" style="display:flex;gap:10px;align-items:flex-end">
+                <button id="btn_buscar" class="primary">Buscar (carrega JSON se preciso)</button>
+                <button id="btn_limpar">Limpar filtros</button>
+                <button id="btn_export" title="Exportar CSV dos resultados filtrados">Exportar CSV</button>
+            </div>
+
+            <div class="col-4" style="display:flex;gap:10px;align-items:flex-end">
+                <button id="btn_export_labels" title="Exportar itens rotulados (JSON rico)">Exportar rótulos
+                    (JSON)</button>
+                <label for="import_labels" class="small"
+                    style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+                    <input id="import_labels" type="file" accept="application/json" style="display:none">Importar
+                    rótulos
+                </label>
+                <button id="btn_export_deleted" title="Exportar itens excluídos (JSON)">Exportar excluídos</button>
+                <button id="btn_clear_labels" title="Apagar rótulos salvos">Limpar rótulos</button>
+            </div>
+
+            <div class="col-12 small">O JSON só será carregado quando ao menos um filtro estiver preenchido. Arquivo
+                esperado: <code>resultado_busca_multi5.json</code></div>
+        </div>
+
+        <div class="status" id="status"><span class="dot idle"></span><span id="status_text">Aguardando filtros…</span>
+        </div>
+
+        <div class="toolbar">
+            <div class="badge"><strong id="count">0</strong>&nbsp;registros</div>
+            <div class="pager">
+                <button id="prev">◀</button>
+                <span class="small">Página&nbsp;<strong id="page">1</strong>/<strong id="pages">1</strong> — máx. <span
+                        id="pagesize">200</span> por página</span>
+                <button id="next">▶</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table id="tabela">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-k="descritor">Descritor</th>
+                        <th class="sortable" data-k="fonte">Fonte</th>
+                        <th class="sortable" data-k="tipo">Tipo</th>
+                        <th class="sortable" data-k="ano">Ano</th>
+                        <th class="sortable" data-k="titulo">Título</th>
+                        <th class="sortable" data-k="autores">Autores</th>
+                        <th>Resumo</th>
+                        <th class="sortable" data-k="doi">DOI</th>
+                        <th class="sortable" data-k="relevancia">Relevância</th>
+                        <th>Ações</th>
+                        <th>Link</th>
+                        <th>Como citar</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr>
+                        <td colspan="12">
+                            <div class="empty">Nada a exibir. Aplique filtros e clique em <strong>Buscar</strong>.</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        /* ========= Sugestões locais de descritores ========= */
+        const DESCRITORES_SUGESTOES = [
+            "Parque Nacional da Serra da Capivara", "Serra da Capivara", "PNSC", "São Raimundo Nonato Piauí", "FUMDHAM",
+            "ICMBio Parque Nacional Serra da Capivara", "IPHAN Serra da Capivara", "ICOMOS Serra da Capivara",
+            "UNESCO World Heritage Serra da Capivara", "Decreto 83.548/1979 Serra da Capivara",
+            "SNUC unidade de conservação Parque Nacional", "plano de manejo Parque Nacional Serra da Capivara",
+            "licenciamento ambiental patrimônio arqueológico", "zona de amortecimento PNSC", "tombamento arqueológico IPHAN Piauí",
+            "paisagem cultural Serra da Capivara", "gestão compartilhada IPHAN ICMBio FUMDHAM", "conselho consultivo PNSC",
+            "regularização fundiária Parque Nacional da Serra da Capivara", "arte rupestre Piauí", "registro rupestre Nordeste",
+            "ecoturismo Serra da Capivara", "turismo sustentável PNSC", "conflitos socioambientais PNSC"
+        ];
+        (function preloadDatalist() {
+            const dl = document.getElementById('descritor-list');
+            DESCRITORES_SUGESTOES.forEach(v => { const o = document.createElement('option'); o.value = v; dl.appendChild(o); });
+        })();
+
+        /* ==================== Estado e utilitários ==================== */
+        let DATA = null, FILTERED = [], PAGE = 1, PER_PAGE = 200;
+        let SORT = { key: null, dir: 1 }; // 1 asc, -1 desc
+
+        // Persistência
+        const STORAGE_RELEV = 'relevancias_v2';
+        const STORAGE_DELETED = 'excluidos_v1';
+        let RELEV = loadObj(STORAGE_RELEV);
+        let DELETED = loadObj(STORAGE_DELETED);
+
+        const $ = (id) => document.getElementById(id);
+        const statusText = (msg, tone = "idle") => {
+            const dot = document.querySelector('.status .dot');
+            dot.className = 'dot ' + (tone === 'ok' ? 'ok' : tone === 'warn' ? 'warn' : tone === 'err' ? 'err' : 'idle');
+            $('status_text').textContent = msg;
+        };
+        const normalize = s => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        function loadObj(k) { try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {} } }
+        function saveObj(k, o) { try { localStorage.setItem(k, JSON.stringify(o)); } catch { } }
+
+        function recordKey(r) {
+            const doi = (r.doi || '').toLowerCase().trim();
+            if (doi) return 'doi:' + doi;
+            return 't+' + normalize(r.titulo || '') + '|' + (r.ano || '');
+        }
+        function getRelev(r) { return RELEV[recordKey(r)] || '' }
+        function setRelev(r, val) { const k = recordKey(r); if (val) RELEV[k] = val; else delete RELEV[k]; saveObj(STORAGE_RELEV, RELEV); }
+        function isDeleted(r) { return !!DELETED[recordKey(r)] }
+        function setDeleted(r, val) { const k = recordKey(r); if (val) DELETED[k] = true; else delete DELETED[k]; saveObj(STORAGE_DELETED, DELETED); }
+
+        const hasAtLeastOneFilter = () => ['f_descritor', 'f_fonte', 'f_tipo', 'f_ano_min', 'f_ano_max', 'f_titulo', 'f_doi', 'f_autores', 'f_relevancia', 'f_excluidos']
+            .map($).some(el => (el.value || '').trim().length > 0);
+
+        /* ==================== Copiar texto (robusto: HTTPS/localhost + fallback file://) ==================== */
+        async function copyTextRobusto(text) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    statusText('Citação copiada!', 'ok');
+                    return;
+                }
+                throw new Error('Insecure context');
+            } catch (e) {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    const ok = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    statusText(ok ? 'Citação copiada!' : 'Falha ao copiar.', ok ? 'ok' : 'err');
+                } catch {
+                    statusText('Falha ao copiar para a área de transferência.', 'err');
+                }
+            }
+        }
+
+        /* ==================== Carregamento sob demanda ==================== */
+        async function ensureDataLoaded() {
+            if (DATA) return DATA;
+            statusText('Carregando JSON local…', 'warn');
+            const resp = await fetch('resultado_busca_multi5.json', { cache: 'no-store' });
+            if (!resp.ok) { statusText('Erro ao carregar JSON (' + resp.status + ').', 'err'); throw new Error('fetch'); }
+            DATA = await resp.json();
+            statusText('JSON carregado. Agora filtrando…', 'ok');
+            return DATA;
+        }
+
+        /* ==================== Filtro + Ordenação + Paginação ==================== */
+        function applyFilters() {
+            if (!DATA) return [];
+            const f = {
+                descritor: normalize($('f_descritor').value),
+                fonte: normalize($('f_fonte').value),
+                tipo: normalize($('f_tipo').value),
+                anoMin: parseInt($('f_ano_min').value || '0', 10),
+                anoMax: parseInt($('f_ano_max').value || '9999', 10),
+                titulo: normalize($('f_titulo').value),
+                autores: normalize($('f_autores').value),
+                relev: normalize($('f_relevancia').value),
+                doi: normalize($('f_doi').value),
+                showDeleted: $('f_excluidos').value === 'sim'
+            };
+            let out = DATA.filter(r => {
+                const descr = normalize(r.descritor), fonte = normalize(r.fonte), tipo = normalize(r.tipo);
+                const ano = parseInt(r.ano || '0', 10) || 0, tit = normalize(r.titulo), aut = normalize(r.autores), doi = normalize(r.doi);
+                const rel = normalize(getRelev(r)), del = isDeleted(r);
+                let ok = true;
+                if (!f.showDeleted && del) ok = false;
+                if (f.descritor && !descr.includes(f.descritor)) ok = false;
+                if (f.fonte && fonte !== f.fonte) ok = false;
+                if (f.tipo && tipo !== f.tipo) ok = false;
+                if ((f.anoMin && ano < f.anoMin) || (f.anoMax && ano > f.anoMax)) ok = false;
+                if (f.titulo && !tit.includes(f.titulo)) ok = false;
+                if (f.autores && !aut.includes(f.autores)) ok = false;
+                if (f.relev && rel !== f.relev) ok = false;
+                if (f.doi && !doi.includes(f.doi)) ok = false;
+                return ok;
+            });
+            if (SORT.key) {
+                const k = SORT.key, dir = SORT.dir;
+                const rankRel = v => ({ 'baixo': 1, 'medio': 2, 'médio': 2, 'alto': 3 }[normalize(v)] || 0);
+                out.sort((a, b) => {
+                    if (k === 'relevancia') { return dir * (rankRel(getRelev(a)) - rankRel(getRelev(b))); }
+                    let av = (a[k] ?? '').toString(), bv = (b[k] ?? '').toString();
+                    if (k === 'ano') return dir * ((parseInt(av) || 0) - (parseInt(bv) || 0));
+                    return dir * av.localeCompare(bv, undefined, { sensitivity: 'base' });
+                });
+            }
+            return out;
+        }
+
+        function renderTable() {
+            const tbody = $('tbody'); tbody.innerHTML = '';
+            if (!FILTERED.length) {
+                tbody.innerHTML = '<tr><td colspan="12"><div class="empty">Nenhum resultado para os filtros aplicados.</div></td></tr>';
+                $('count').textContent = '0'; $('page').textContent = '1'; $('pages').textContent = '1'; return;
+            }
+            const pages = Math.max(1, Math.ceil(FILTERED.length / PER_PAGE));
+            PAGE = Math.min(PAGE, pages);
+            const start = (PAGE - 1) * PER_PAGE, end = Math.min(start + PER_PAGE, FILTERED.length);
+            const frag = document.createDocumentFragment();
+
+            for (let i = start; i < end; i++) {
+                const r = FILTERED[i]; const tr = document.createElement('tr');
+                if (isDeleted(r)) tr.classList.add('deleted');
+
+                // colunas base
+                const base = [r.descritor || '', r.fonte || '', r.tipo || '', (r.ano ?? '') + '', r.titulo || '', r.autores || '', r.resumo || '', r.doi || ''];
+                base.forEach((val, idx) => {
+                    const td = document.createElement('td'); if (idx === 4) td.className = 'titulo';
+                    td.textContent = val; tr.appendChild(td);
+                });
+
+                // Relevância
+                const tdRel = document.createElement('td');
+                const wrapRel = document.createElement('div'); wrapRel.style.display = 'flex'; wrapRel.style.alignItems = 'center'; wrapRel.style.gap = '8px';
+                const sel = document.createElement('select');
+                ['', 'alto', 'medio', 'baixo'].forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v ? v : '(—)'; sel.appendChild(o); });
+                sel.value = getRelev(r) || '';
+                const pill = document.createElement('span');
+                const setPill = v => { pill.className = 'pill ' + (v || ''); pill.textContent = v || '—'; };
+                setPill(sel.value);
+                sel.addEventListener('change', () => {
+                    setRelev(r, sel.value); setPill(sel.value);
+                    if (($('f_relevancia').value || '').trim()) { FILTERED = applyFilters(); PAGE = 1; renderTable(); }
+                });
+                wrapRel.appendChild(sel); wrapRel.appendChild(pill); tdRel.appendChild(wrapRel); tr.appendChild(tdRel);
+
+                // Ações (Excluir/Restaurar)
+                const tdAct = document.createElement('td'); tdAct.className = 'actions';
+                const btn = document.createElement('button');
+                const refreshBtn = () => {
+                    if (isDeleted(r)) { btn.textContent = 'Restaurar'; btn.title = 'Restaurar registro'; }
+                    else { btn.textContent = 'Excluir'; btn.title = 'Excluir (ocultar persistentemente)'; }
+                };
+                refreshBtn();
+                btn.addEventListener('click', () => {
+                    const nowDel = isDeleted(r);
+                    setDeleted(r, !nowDel);
+                    if (($('f_excluidos').value || 'nao') === 'nao' && !nowDel) { // acabou de excluir e não exibe excluídos
+                        FILTERED = applyFilters(); PAGE = 1; renderTable(); return;
+                    }
+                    refreshBtn();
+                    tr.classList.toggle('deleted', !nowDel);
+                });
+                tdAct.appendChild(btn); tr.appendChild(tdAct);
+
+                // Link
+                const tdLink = document.createElement('td');
+                if (r.link) { const a = document.createElement('a'); a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'acesso'; tdLink.appendChild(a); }
+                tr.appendChild(tdLink);
+
+                // Como citar
+                const tdCitar = document.createElement('td');
+                tdCitar.className = 'citar-cell';
+
+                const citarTxt = r.como_citar || '';
+                if (citarTxt) {
+                    const p = document.createElement('div');
+                    p.className = 'citar';
+                    p.textContent = citarTxt;
+
+                    // botões
+                    const btnCopy = document.createElement('button');
+                    btnCopy.textContent = 'Copiar';
+                    btnCopy.className = 'small';
+                    btnCopy.addEventListener('click', () => copyTextRobusto(citarTxt));
+
+                    const btnCopyOne = document.createElement('button');
+                    btnCopyOne.textContent = 'Copiar (1 linha)';
+                    btnCopyOne.className = 'small';
+                    btnCopyOne.addEventListener('click', () => {
+                        const oneLine = citarTxt.replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ');
+                        copyTextRobusto(oneLine);
+                    });
+
+                    const btnToggle = document.createElement('button');
+                    btnToggle.textContent = 'Ver mais';
+                    btnToggle.className = 'small';
+                    btnToggle.addEventListener('click', () => {
+                        p.classList.toggle('expanded');
+                        btnToggle.textContent = p.classList.contains('expanded') ? 'Ver menos' : 'Ver mais';
+                    });
+
+                    const wrapCitar = document.createElement('div');
+                    wrapCitar.style.display = 'flex';
+                    wrapCitar.style.alignItems = 'flex-start';
+                    wrapCitar.style.gap = '8px';
+
+                    const btnWrap = document.createElement('div');
+                    btnWrap.style.display = 'flex';
+                    btnWrap.style.flexDirection = 'column';
+                    btnWrap.style.gap = '6px';
+
+                    btnWrap.appendChild(btnCopy);
+                    btnWrap.appendChild(btnCopyOne);
+                    btnWrap.appendChild(btnToggle);
+
+                    wrapCitar.appendChild(p);
+                    wrapCitar.appendChild(btnWrap);
+                    tdCitar.appendChild(wrapCitar);
+                } else {
+                    tdCitar.textContent = '';
+                }
+                tr.appendChild(tdCitar);
+
+
+                frag.appendChild(tr);
+            }
+            tbody.appendChild(frag);
+            $('count').textContent = FILTERED.length.toString();
+            $('page').textContent = PAGE.toString(); $('pages').textContent = pages.toString();
+        }
+
+        /* ==================== Ações UI ==================== */
+        $('btn_buscar').addEventListener('click', async () => {
+            if (!hasAtLeastOneFilter()) { statusText('Informe pelo menos um filtro antes de buscar.', 'warn'); return; }
+            try {
+                await ensureDataLoaded(); PAGE = 1; FILTERED = applyFilters();
+                statusText(`Filtrado: ${FILTERED.length} registro(s).`, 'ok'); renderTable();
+            } catch (e) { statusText('Falha na busca. Veja o console.', 'err'); console.error(e); }
+        });
+
+        $('btn_limpar').addEventListener('click', () => {
+            ['f_descritor', 'f_fonte', 'f_tipo', 'f_ano_min', 'f_ano_max', 'f_titulo', 'f_doi', 'f_autores', 'f_relevancia', 'f_excluidos']
+                .forEach(id => $(id).value = (id === 'f_excluidos' ? 'nao' : ''));
+            FILTERED = []; PAGE = 1;
+            $('tbody').innerHTML = '<tr><td colspan="12"><div class="empty">Nada a exibir. Aplique filtros e clique em <strong>Buscar</strong>.</div></td></tr>';
+            $('count').textContent = '0'; $('page').textContent = '1'; $('pages').textContent = '1';
+            statusText('Aguardando filtros…', 'idle');
+        });
+
+        $('prev').addEventListener('click', () => { if (PAGE > 1) { PAGE--; renderTable(); } });
+        $('next').addEventListener('click', () => {
+            const pages = Math.max(1, Math.ceil(FILTERED.length / PER_PAGE)); if (PAGE < pages) { PAGE++; renderTable(); }
+        });
+
+        document.querySelectorAll('thead th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const key = th.dataset.k; if (SORT.key === key) { SORT.dir *= -1; } else { SORT.key = key; SORT.dir = 1; }
+                if (!FILTERED.length) return; FILTERED = applyFilters(); renderTable();
+            });
+        });
+
+        // Export CSV (com relevância e como_citar; sem coluna Ações)
+        $('btn_export').addEventListener('click', () => {
+            if (!FILTERED.length) { statusText('Nada para exportar. Filtre primeiro.', 'warn'); return; }
+            const cols = ["descritor", "fonte", "tipo", "ano", "titulo", "autores", "resumo", "doi", "relevancia", "link", "como_citar"];
+            const esc = s => `"${(s ?? '').toString().replace(/\r?\n/g, ' \\n ').replace(/"/g, '""')}"`;
+            let csv = cols.join(',') + '\n';
+            FILTERED.forEach(r => {
+                const rel = getRelev(r);
+                const row = { ...r, relevancia: rel };
+                csv += cols.map(k => esc(row[k])).join(',') + '\n';
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = 'resultado_filtrado.csv'; document.body.appendChild(a); a.click(); a.remove();
+        });
+
+        // Exportar rótulos (JSON “rico” com as MESMAS chaves do dataset)
+        $('btn_export_labels').addEventListener('click', () => {
+            if (!DATA) { statusText('Carregue o JSON primeiro (Buscar).', 'warn'); return; }
+            const out = [];
+            DATA.forEach(r => {
+                const rel = getRelev(r);
+                if (rel) {
+                    out.push({
+                        descritor: r.descritor || '', fonte: r.fonte || '', tipo: r.tipo || '', ano: r.ano || '',
+                        titulo: r.titulo || '', autores: r.autores || '', resumo: r.resumo || '',
+                        doi: r.doi || '', relevancia: rel, link: r.link || '', como_citar: r.como_citar || ''
+                    });
+                }
+            });
+            const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json;charset=utf-8' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'rotulos.json'; document.body.appendChild(a); a.click(); a.remove();
+            statusText(`Exportados ${out.length} rótulos.`, 'ok');
+        });
+
+        // Exportar excluídos (JSON rico)
+        $('btn_export_deleted').addEventListener('click', () => {
+            if (!DATA) { statusText('Carregue o JSON primeiro (Buscar).', 'warn'); return; }
+            const out = [];
+            DATA.forEach(r => {
+                if (isDeleted(r)) {
+                    out.push({
+                        descritor: r.descritor || '', fonte: r.fonte || '', tipo: r.tipo || '', ano: r.ano || '',
+                        titulo: r.titulo || '', autores: r.autores || '', resumo: r.resumo || '',
+                        doi: r.doi || '', link: r.link || '', como_citar: r.como_citar || ''
+                    });
+                }
+            });
+            const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json;charset=utf-8' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'excluidos.json'; document.body.appendChild(a); a.click(); a.remove();
+            statusText(`Exportados ${out.length} excluídos.`, 'ok');
+        });
+
+        // Limpar rótulos
+        $('btn_clear_labels').addEventListener('click', () => {
+            RELEV = {}; saveObj(STORAGE_RELEV, RELEV);
+            statusText('Rótulos limpos.', 'ok');
+            if (FILTERED.length) { FILTERED = applyFilters(); renderTable(); }
+        });
+
+        // Importar rótulos: aceita (1) mapa {key:relev} antigo OU (2) array de objetos {..,relevancia}
+        $('import_labels').addEventListener('change', (e) => {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const obj = JSON.parse(reader.result);
+                    let count = 0;
+                    if (Array.isArray(obj)) {
+                        obj.forEach(o => {
+                            const fake = { doi: o.doi || '', titulo: o.titulo || '', ano: o.ano || '' };
+                            const key = recordKey(fake);
+                            if (o.relevancia) { RELEV[key] = o.relevancia; count++; }
+                        });
+                    } else if (obj && typeof obj === 'object') {
+                        Object.keys(obj).forEach(k => { const v = obj[k]; if (v) { RELEV[k] = v; count++; } });
+                    } else { throw new Error('Formato inválido'); }
+                    saveObj(STORAGE_RELEV, RELEV);
+                    if (FILTERED.length) { FILTERED = applyFilters(); renderTable(); }
+                    statusText(`Rótulos importados: ${count}.`, 'ok');
+                } catch {
+                    statusText('Falha ao importar rótulos.', 'err');
+                }
+            };
+            reader.readAsText(file, 'utf-8'); e.target.value = '';
+        });
+
+        /* página por tecla: ← → */
+        window.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (e.key === 'ArrowLeft') $('prev').click();
+            if (e.key === 'ArrowRight') $('next').click();
+        });
+    </script>
+</body>
+
+</html>
